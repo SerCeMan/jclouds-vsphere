@@ -15,18 +15,23 @@
  * limitations under the License.
  */
 
-package org.jclouds.vsphere.api;
+package org.jclouds.vsphere.api
 
+import com.vmware.vim25.InvalidName
+import com.vmware.vim25.OptionDef
+import com.vmware.vim25.OptionValue
+import com.vmware.vim25.RuntimeFault
 
-import com.vmware.vim25.mo.GuestAuthManager;
-import com.vmware.vim25.mo.GuestFileManager;
-import com.vmware.vim25.mo.GuestProcessManager;
-import com.vmware.vim25.mo.VirtualMachine;
+import java.rmi.RemoteException
 
-public interface GuestOperationsManagerApi {
-   GuestAuthManager getAuthManager(VirtualMachine vm);
+interface OptionManagerApi {
+    val setting: List<OptionValue>
 
-   GuestFileManager getFileManager(VirtualMachine vm);
+    val supportedOption: List<OptionDef>
 
-   GuestProcessManager getProcessManager(VirtualMachine vm);
+    @Throws(InvalidName::class, RuntimeFault::class, RemoteException::class)
+    fun queryOptions(name: String): List<OptionValue>
+
+    @Throws(InvalidName::class, RuntimeFault::class, RemoteException::class)
+    fun updateOptions(changedValue: List<OptionValue>)
 }

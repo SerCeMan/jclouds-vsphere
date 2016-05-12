@@ -1,6 +1,3 @@
-group 'me.serce.jclouds'
-version '0.1.0-SNAPSHOT'
-
 buildscript {
     repositories {
         mavenCentral()
@@ -10,16 +7,57 @@ buildscript {
     }
 }
 
-apply plugin: 'java'
+plugins {
+    id 'java'
+    id 'maven'
+    id "com.jfrog.bintray" version "1.6"
+}
+
 apply plugin: 'kotlin'
-
-sourceCompatibility = 1.6
-
-ext.jcloudsVersion = '1.9.2'
 
 repositories {
     mavenCentral()
 }
+
+group 'me.serce.jclouds'
+version '0.1.0-SNAPSHOT'
+
+sourceCompatibility = 1.6
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+artifacts {
+    archives sourcesJar
+    archives javadocJar
+}
+
+
+bintray {
+    user = 'serce'
+    key = System.getenv("BINTRAY")
+    configurations = ['archives']
+    dryRun = false
+    publish = true
+    pkg {
+        repo = 'maven'
+        name = 'jclouds-vsphere'
+        licenses = ['Apache-2.0']
+        version {
+            released  = new Date()
+            name = '0.1.0'
+        }
+    }
+}
+
+ext.jcloudsVersion = '1.9.2'
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib:1.0.1"

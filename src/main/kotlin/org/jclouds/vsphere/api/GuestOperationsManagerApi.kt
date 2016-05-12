@@ -15,13 +15,18 @@
  * limitations under the License.
  */
 
-package org.jclouds.vsphere.api;
+package org.jclouds.vsphere.api
 
 
-import com.vmware.vim25.LocalizationManagerMessageCatalog;
+import com.vmware.vim25.mo.GuestAuthManager
+import com.vmware.vim25.mo.GuestFileManager
+import com.vmware.vim25.mo.GuestProcessManager
+import com.vmware.vim25.mo.VirtualMachine
 
-import java.util.List;
+interface GuestOperationsManagerApi {
+    fun getAuthManager(vm: VirtualMachine): GuestAuthManager
 
-public interface LocalizationManagerApi {
-   List<LocalizationManagerMessageCatalog> getCatalog();
+    fun getFileManager(vm: VirtualMachine): GuestFileManager
+
+    fun getProcessManager(vm: VirtualMachine): GuestProcessManager
 }

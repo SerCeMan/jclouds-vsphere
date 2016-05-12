@@ -15,22 +15,11 @@
  * limitations under the License.
  */
 
-package org.jclouds.vsphere.api;
+package org.jclouds.vsphere.api
 
-import com.vmware.vim25.InvalidName;
-import com.vmware.vim25.OptionDef;
-import com.vmware.vim25.OptionValue;
-import com.vmware.vim25.RuntimeFault;
 
-import java.rmi.RemoteException;
-import java.util.List;
+import com.vmware.vim25.LocalizationManagerMessageCatalog
 
-public interface OptionManagerApi {
-   List<OptionValue> getSetting();
-
-   List<OptionDef> getSupportedOption();
-
-   List<OptionValue> queryOptions(String name) throws InvalidName, RuntimeFault, RemoteException;
-
-   void updateOptions(List<OptionValue> changedValue) throws InvalidName, RuntimeFault, RemoteException;
+interface LocalizationManagerApi {
+    val catalog: List<LocalizationManagerMessageCatalog>
 }
