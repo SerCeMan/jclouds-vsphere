@@ -1,0 +1,35 @@
+### Intellij ###
+# Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio and Webstorm
+.idea/
+*.iws
+# IntelliJ
+/out/
+*.iml
+modules.xml
+
+### Java ###
+*.class
+
+# Package Files #
+*.jar
+*.war
+*.ear
+
+# virtual machine crash logs
+hs_err_pid*
+
+### Gradle ###
+.gradle
+build/
+
+# Ignore Gradle GUI config
+gradle-app.setting
+
+# Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
+!gradle-wrapper.jar
+
+# Cache of project
+.gradletasknamecache
+
+# main/java for experiments
+src/main/java
