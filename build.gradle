@@ -20,7 +20,7 @@ repositories {
 }
 
 group 'me.serce.jclouds'
-version '0.1.1-SNAPSHOT'
+version '0.1.2-SNAPSHOT'
 
 sourceCompatibility = 1.6
 
