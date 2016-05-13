@@ -1,4 +1,50 @@
-clouds-vsphere
-===========
+= jclouds-vsphere
+
+jclouds-vsphere - VMware vSphere provider for JClouds
+
+== Project Goals
+
+Main goal of the project is to provide easy way to manipulate VMware vSphere using jclouds.
+
+== Get it
+=== Gradle
+
+[source,gradle]
+----
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile 'me.serce.jclouds:jclouds-vsphere:0.1.1'
+}
+----
+
+=== Maven
+[source,xml]
+----
+<repositories>
+    <repository>
+        <id>central</id>
+        <name>bintray</name>
+        <url>http://jcenter.bintray.com</url>
+    </repository>
+</repositories>
+
+<dependency>
+    <groupId>me.serce.jclouds</groupId>
+    <artifactId>jclouds-vsphere</artifactId>
+    <version>0.1.1</version>
+</dependency>
+----
+
+== Thanks
+
+This project is based on link:https://github.com/igreenfield/jcloud-vsphere[jcloud-sphere from igreenfield]
+
+
+
+
+
 
 
