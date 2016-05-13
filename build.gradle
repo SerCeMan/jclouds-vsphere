@@ -20,7 +20,7 @@ repositories {
 }
 
 group 'me.serce.jclouds'
-version '0.1.0-SNAPSHOT'
+version '0.1.1-SNAPSHOT'
 
 sourceCompatibility = 1.6
 
@@ -52,7 +52,7 @@ bintray {
         licenses = ['Apache-2.0']
         version {
             released  = new Date()
-            name = '0.1.0'
+            name = '0.1.1'
         }
     }
 }
