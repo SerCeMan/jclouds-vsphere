@@ -20,17 +20,13 @@ package org.jclouds.vsphere.functions
 import com.google.common.base.Function
 import com.google.common.base.Supplier
 import com.google.common.collect.Iterables
-import com.vmware.vim25.mo.*
-import org.jclouds.compute.reference.ComputeServiceConstants
-import org.jclouds.logging.Logger
+import com.vmware.vim25.mo.ComputeResource
+import com.vmware.vim25.mo.HostSystem
+import com.vmware.vim25.mo.InventoryNavigator
 import org.jclouds.vsphere.domain.VSphereHost
 import org.jclouds.vsphere.domain.VSphereServiceInstance
-import javax.annotation.Resource
+import java.util.*
 import javax.inject.Inject
-import javax.inject.Named
-import java.util.Arrays
-
-import com.google.common.base.Preconditions.checkNotNull
 
 /**
  * Created by igreenfi on 26/10/2014.

@@ -24,8 +24,6 @@ import com.google.common.collect.Lists
 import com.google.common.collect.Sets.newHashSet
 import com.google.common.net.InetAddresses
 import com.google.inject.Inject
-import com.google.inject.ProvidedBy
-import com.google.inject.Provides
 import com.google.inject.Singleton
 import com.vmware.vim25.VirtualMachinePowerState
 import com.vmware.vim25.VirtualMachineToolsStatus
@@ -197,7 +195,7 @@ constructor(val serviceInstanceSupplier: Supplier<VSphereServiceInstance>,
     }
 
     companion object {
-        private val isPrivateAddress = { `in`: String? -> InetAddresses2.IsPrivateIPAddress.INSTANCE.apply(`in`) }
+        private val isPrivateAddress = { addr: String? -> InetAddresses2.IsPrivateIPAddress.INSTANCE.apply(addr) }
 
         private val isInet4Address = { input: String? ->
             try {

@@ -17,13 +17,9 @@
 package org.jclouds.vsphere.predicates
 
 import com.google.common.base.Predicate
-import com.google.common.net.InetAddresses
-import com.vmware.vim25.GuestNicInfo
 import com.vmware.vim25.VirtualMachineToolsStatus
 import com.vmware.vim25.mo.VirtualMachine
 import org.jclouds.util.Predicates2
-import java.net.Inet4Address
-import java.net.Inet6Address
 import java.util.concurrent.TimeUnit
 
 /**

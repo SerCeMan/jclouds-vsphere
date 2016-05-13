@@ -45,8 +45,6 @@ import org.jclouds.vsphere.suppliers.VSphereLocationSupplier
 import javax.inject.Singleton
 
 
-/**
- */
 class VSphereComputeServiceContextModule : ComputeServiceAdapterContextModule<VirtualMachine, Hardware, Image, Location>() {
 
     @Singleton
@@ -86,15 +84,12 @@ class VSphereComputeServiceContextModule : ComputeServiceAdapterContextModule<Vi
         }).to(VirtualMachineToNodeMetadata::class.java)
 
         bind(object : TypeLiteral<Supplier<VSphereServiceInstance>>() {
-
         }).to(CreateAndConnectVSphereClient::class.java)
 
         bind(object : TypeLiteral<Function<VirtualMachine, SshClient>>() {
-
         }).to(VirtualMachineToSshClient::class.java)
 
         bind(object : TypeLiteral<Function<String, VSphereHost>>() {
-
         }).to(GetRecommendedVSphereHost::class.java)
     }
 

@@ -42,10 +42,8 @@ import org.jclouds.vsphere.compute.options.VSphereTemplateOptions
 import org.jclouds.vsphere.config.VSphereConstants
 import org.jclouds.vsphere.config.VSphereConstants.CLONING
 import org.jclouds.vsphere.domain.HardwareProfiles
-import org.jclouds.vsphere.domain.NetworkConfig
 import org.jclouds.vsphere.domain.VSphereHost
 import org.jclouds.vsphere.domain.VSphereServiceInstance
-import org.jclouds.vsphere.functions.FolderNameToFolderManagedEntity
 import org.jclouds.vsphere.functions.MasterToVirtualMachineCloneSpec
 import org.jclouds.vsphere.functions.VirtualMachineToImage
 import org.jclouds.vsphere.predicates.VSpherePredicate
@@ -79,7 +77,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
 
         val vOptions = template.options as VSphereTemplateOptions
 
-        val datacenterName = vOptions.datacenterName
+        val datacenterName = vOptions.datacenter
         try {
             this.serviceInstance.get().use { instance ->
                 hostFunction.apply(datacenterName)!!.use({ sphereHost ->
@@ -99,7 +97,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                             sphereHost.datastore,
                             VSphereApiMetadata.defaultProps().getProperty(CLONING),
                             name,
-                            vOptions).apply(master)
+                            vOptions).invoke(master)
 
 
                     val virtualMachineConfigSpec = VirtualMachineConfigSpec()
@@ -111,31 +109,20 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
 
                     val extraConf = vOptions.extraConfig
                     if (extraConf != null) {
-                        val optionsValue = arrayOfNulls<OptionValue>(extraConf.size)
-                        var i = 0
-                        for (entry in extraConf.entries) {
-                            val op = OptionValue()
-                            op.setKey(entry.key)
-                            op.setValue(entry.value)
-                            optionsValue[i++] = op
-                        }
-                        virtualMachineConfigSpec.setExtraConfig(optionsValue)
-                    }
-
-
-                    val networkConfigs = Sets.newHashSet<NetworkConfig>()
-                    if (networkConfigs.isEmpty()) {
-                        networkConfigs.add(NetworkConfig("QA Lan 30"))
+                        virtualMachineConfigSpec.setExtraConfig(extraConf.map { e ->
+                            OptionValue().apply {
+                                key = e.key
+                                value = e.value
+                            }
+                        }.toTypedArray())
                     }
 
 
                     cloneSpec.setConfig(virtualMachineConfigSpec)
 
-                    vOptions.publicKey
-
                     var cloned: VirtualMachine? = null
                     try {
-                        cloned = cloneMaster(master, name, cloneSpec, vOptions.vmFolder)
+                        cloned = cloneMaster(master, name, cloneSpec, vOptions.folder)
                         VSpherePredicate.WAIT_FOR_NIC(1000 * 60 * 60 * 2, TimeUnit.MILLISECONDS).apply(cloned)
                     } catch (e: Exception) {
                         logger.error("Can't clone vm " + master.name + ", Error message: " + e.toString(), e)
@@ -239,7 +226,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
 
     override fun listLocations() = ImmutableSet.of<Location>()
 
-    override fun getNode(vmName: String) = serviceInstance.get().use { instance -> getVM(vmName, instance.instance.rootFolder) }!!
+    override fun getNode(vmName: String) = serviceInstance.get().use { instance -> getVM(vmName, instance.instance.rootFolder) }
 
     override fun destroyNode(vmName: String) {
         try {
@@ -259,41 +246,54 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
             }
         } catch (e: Exception) {
             logger.error("Can't destroy vm " + vmName, e)
-            Throwables.propagateIfPossible(e)
+            throw e;
         }
-
     }
 
     override fun rebootNode(vmName: String) {
         val virtualMachine = getNode(vmName)
+        if (virtualMachine == null) {
+            logger.info("No node $vmName found")
+            return
+        }
         try {
             virtualMachine.rebootGuest()
         } catch (e: Exception) {
-            logger.error("Can't reboot vm " + vmName, e)
-            propagate(e)
+            logger.error("Can't reboot vm $vmName", e)
+            throw e
         }
-        logger.debug(vmName + " rebooted")
+        logger.debug("$vmName rebooted")
     }
 
     override fun resumeNode(vmName: String) {
         val virtualMachine = getNode(vmName)
+        if (virtualMachine == null) {
+            logger.info("No node $vmName found")
+            return
+        }
 
-        if (virtualMachine.getRuntime().getPowerState() == VirtualMachinePowerState.poweredOff) {
+        if (virtualMachine.runtime.getPowerState() == VirtualMachinePowerState.poweredOff) {
             try {
                 val task = virtualMachine.powerOnVM_Task(null)
-                if (task.waitForTask() == Task.SUCCESS)
-                    logger.debug(virtualMachine.getName() + " resumed")
+                if (task.waitForTask() == Task.SUCCESS) {
+                    logger.debug("${virtualMachine.name} resumed")
+                }
             } catch (e: Exception) {
-                logger.error("Can't resume vm " + vmName, e)
+                logger.error("Can't resume vm $vmName", e)
                 propagate(e)
             }
 
-        } else
+        } else {
             logger.debug(vmName + " can't be resumed")
+        }
     }
 
     override fun suspendNode(vmName: String) {
         val virtualMachine = getNode(vmName)
+        if (virtualMachine == null) {
+            logger.info("No node $vmName found")
+            return
+        }
 
         try {
             val task = virtualMachine.suspendVM_Task()
@@ -315,15 +315,22 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
             Throwables.propagateIfPossible(t)
             return null
         }
+    }
 
+    fun VirtualMachine.findFolder(serviceInstance: Supplier<VSphereServiceInstance>, folderName: String?): Folder {
+        val master = this;
+        if (Strings.isNullOrEmpty(folderName))
+            return master.parent as Folder
+        val instance = serviceInstance.get()
+        val entity = InventoryNavigator(instance.instance.rootFolder).searchManagedEntity("Folder", folderName)
+        return entity as Folder
     }
 
     private fun cloneMaster(master: VirtualMachine, name: String, cloneSpec: VirtualMachineCloneSpec, folderName: String?): VirtualMachine {
 
         var cloned: VirtualMachine? = null
         try {
-            val toFolderManagedEntity = FolderNameToFolderManagedEntity(serviceInstance, master)
-            val folder = toFolderManagedEntity.apply(folderName)!!
+            val folder = master.findFolder(serviceInstance, folderName)
             val task = master.cloneVM_Task(folder, name, cloneSpec)
             val result = task.waitForTask()
             if (result == Task.SUCCESS) {

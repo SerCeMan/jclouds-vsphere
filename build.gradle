@@ -41,8 +41,8 @@ artifacts {
 
 
 bintray {
-    user = 'serce'
-    key = System.getenv("BINTRAY")
+    user = System.getenv("BINTRAY_USER")
+    key = System.getenv("BINTRAY_KEY")
     configurations = ['archives']
     dryRun = false
     publish = true

@@ -17,63 +17,47 @@
 
 package org.jclouds.vsphere.functions
 
-import com.google.common.base.Function
 import com.google.common.collect.Lists
-import com.google.inject.Inject
 import com.vmware.vim25.*
 import com.vmware.vim25.mo.Datastore
 import com.vmware.vim25.mo.ResourcePool
-import com.vmware.vim25.mo.Task
 import com.vmware.vim25.mo.VirtualMachine
-import com.vmware.vim25.mo.VirtualMachineSnapshot
-import org.jclouds.compute.reference.ComputeServiceConstants
-import org.jclouds.logging.Logger
-
-import javax.annotation.Resource
-import javax.inject.Named
-import javax.inject.Singleton
-import java.rmi.RemoteException
-import java.util.ArrayList
-
-import com.google.common.base.Preconditions.checkNotNull
-import com.google.common.base.Throwables.propagate
 import org.jclouds.vsphere.compute.options.VSphereTemplateOptions
+import java.util.*
 
 
 class MasterToVirtualMachineCloneSpec(private val resourcePool: ResourcePool,
                                       private val datastore: Datastore,
                                       private val cloningStrategy: String,
                                       private val linuxName: String,
-                                      private val vOptions: VSphereTemplateOptions) : Function<VirtualMachine, VirtualMachineCloneSpec> {
+                                      private val vOptions: VSphereTemplateOptions) {
 
-    override fun apply(master: VirtualMachine?) = prepareCloneSpec(master!!, resourcePool, datastore, linuxName, vOptions.postConfiguration)
+    fun invoke(master: VirtualMachine?) = prepareCloneSpec(master!!, resourcePool, datastore, linuxName)
 
-    private fun prepareCloneSpec(master: VirtualMachine, resourcePool: ResourcePool, datastore: Datastore, linuxName: String, postConfiguration: Boolean): VirtualMachineCloneSpec {
+    private fun prepareCloneSpec(master: VirtualMachine, resourcePool: ResourcePool, datastore: Datastore, linuxName: String): VirtualMachineCloneSpec {
         var relocateSpec = configureRelocateSpec(resourcePool, datastore, master)
-        return configureVirtualMachineCloneSpec(relocateSpec, linuxName, postConfiguration)
+        return configureVirtualMachineCloneSpec(relocateSpec, linuxName)
     }
 
-    private fun configureVirtualMachineCloneSpec(rSpec: VirtualMachineRelocateSpec, linuxName: String, postConfiguration: Boolean)
+    private fun configureVirtualMachineCloneSpec(rSpec: VirtualMachineRelocateSpec, linuxName: String)
             = VirtualMachineCloneSpec()
             .apply {
                 isPowerOn = true
                 template = false
                 location = rSpec
-                if (postConfiguration) {
-                    customization = CustomizationSpec().apply {
-                        identity = CustomizationLinuxPrep().apply {
-                            hostName = CustomizationFixedName().apply {
-                                name = linuxName
-                            }
-                            domain = vOptions.domain
+                customization = CustomizationSpec().apply {
+                    identity = CustomizationLinuxPrep().apply {
+                        hostName = CustomizationFixedName().apply {
+                            name = linuxName
                         }
-                        globalIPSettings = CustomizationGlobalIPSettings()
-                        nicSettingMap = arrayOf(CustomizationAdapterMapping().apply {
-                            adapter = CustomizationIPSettings().apply {
-                                ip = CustomizationDhcpIpGenerator()
-                            }
-                        })
+                        domain = vOptions.domain
                     }
+                    globalIPSettings = CustomizationGlobalIPSettings()
+                    nicSettingMap = arrayOf(CustomizationAdapterMapping().apply {
+                        adapter = CustomizationIPSettings().apply {
+                            ip = CustomizationDhcpIpGenerator()
+                        }
+                    })
                 }
             }
 

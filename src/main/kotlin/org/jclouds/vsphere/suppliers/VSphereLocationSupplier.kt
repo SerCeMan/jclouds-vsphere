@@ -17,26 +17,17 @@
 package org.jclouds.vsphere.suppliers
 
 import com.google.common.base.Supplier
-import com.google.common.base.Throwables
 import com.google.common.collect.ImmutableSet
 import com.google.common.collect.Maps
 import com.google.common.collect.Sets
 import com.vmware.vim25.mo.InventoryNavigator
-import com.vmware.vim25.mo.ManagedEntity
-import org.jclouds.compute.reference.ComputeServiceConstants
 import org.jclouds.domain.Location
 import org.jclouds.domain.LocationScope
 import org.jclouds.domain.internal.LocationImpl
 import org.jclouds.location.suppliers.LocationsSupplier
-import org.jclouds.logging.Logger
 import org.jclouds.vsphere.domain.VSphereServiceInstance
-
-import javax.annotation.Resource
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
-
-import com.google.common.base.Preconditions.checkNotNull
 
 @Singleton
 class VSphereLocationSupplier

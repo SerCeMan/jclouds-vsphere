@@ -16,19 +16,14 @@
  */
 package org.jclouds.vsphere
 
-import com.google.common.collect.ImmutableSet
-import com.google.inject.Module
+import org.jclouds.Constants.PROPERTY_SESSION_INTERVAL
 import org.jclouds.compute.ComputeServiceContext
+import org.jclouds.reflect.Reflection2.typeToken
 import org.jclouds.rest.internal.BaseHttpApiMetadata
 import org.jclouds.vsphere.api.VSphereApi
 import org.jclouds.vsphere.compute.config.VSphereComputeServiceContextModule
 import org.jclouds.vsphere.config.VSphereConstants
-
 import java.net.URI
-import java.util.Properties
-
-import org.jclouds.Constants.PROPERTY_SESSION_INTERVAL
-import org.jclouds.reflect.Reflection2.typeToken
 
 /**
  * Implementation of [BaseHttpApiMetadata] for vSphere 5.1 API
@@ -51,7 +46,7 @@ class VSphereApiMetadata(builder: VBuilder) : BaseHttpApiMetadata<VSphereApi>(bu
                     .version("5.1")
                     .defaultProperties(defaultProps())
                     .view(typeToken(ComputeServiceContext::class.java))
-                    .defaultModules(ImmutableSet.of<Class<out Module>>(VSphereComputeServiceContextModule::class.java))
+                    .defaultModules(setOf(VSphereComputeServiceContextModule::class.java))
         }
 
         override fun build() = VSphereApiMetadata(this)
@@ -60,7 +55,6 @@ class VSphereApiMetadata(builder: VBuilder) : BaseHttpApiMetadata<VSphereApi>(bu
 
     companion object {
         fun defaultProps() = BaseHttpApiMetadata.defaultProperties().apply {
-            setProperty(PROPERTY_SESSION_INTERVAL, "${8 * 60}")
             setProperty("jclouds.dns_name_length_min", "1")
             setProperty("jclouds.dns_name_length_max", "80")
             setProperty(PROPERTY_SESSION_INTERVAL, "300")

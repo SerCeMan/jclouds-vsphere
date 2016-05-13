@@ -18,25 +18,14 @@
 package org.jclouds.vsphere.functions
 
 import com.google.common.base.Supplier
-import com.google.common.base.Throwables
 import com.vmware.vim25.mo.ServiceInstance
-import org.jclouds.compute.reference.ComputeServiceConstants
 import org.jclouds.domain.Credentials
 import org.jclouds.location.Provider
-import org.jclouds.logging.Logger
 import org.jclouds.vsphere.domain.VSphereServiceInstance
-
-import javax.annotation.Resource
-import javax.inject.Inject
-import javax.inject.Named
-import javax.inject.Singleton
-import java.net.MalformedURLException
 import java.net.URI
 import java.net.URL
-import java.rmi.RemoteException
-
-import com.google.common.base.Preconditions.checkNotNull
-import com.google.common.base.Preconditions.checkState
+import javax.inject.Inject
+import javax.inject.Singleton
 
 @Singleton
 class CreateAndConnectVSphereClient

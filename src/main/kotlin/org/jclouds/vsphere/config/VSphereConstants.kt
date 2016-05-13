@@ -22,7 +22,6 @@ package org.jclouds.vsphere.config
  */
 
 object VSphereConstants {
-    const val ENDPOINT = "vsphere.endpoint"
     const val CLONING = "jclouds.vsphere.cloning"
     const val JCLOUDS_VSPHERE_VM_PASSWORD = "jclouds.vsphere.vm.password"
 }
