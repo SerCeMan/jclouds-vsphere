@@ -1,5 +1,5 @@
 = jclouds-vsphere
-
+image::https://api.bintray.com/packages/serce/maven/jclouds-vsphere/images/download.svg[link="https://bintray.com/serce/maven/jclouds-vsphere/_latestVersion"]
 jclouds-vsphere - VMware vSphere provider for JClouds
 
 == Project Goals
@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    compile 'me.serce.jclouds:jclouds-vsphere:0.1.1'
+    compile 'me.serce.jclouds:jclouds-vsphere:0.1.2'
 }
 ----
 
@@ -34,7 +34,7 @@ dependencies {
 <dependency>
     <groupId>me.serce.jclouds</groupId>
     <artifactId>jclouds-vsphere</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
 </dependency>
 ----
 
