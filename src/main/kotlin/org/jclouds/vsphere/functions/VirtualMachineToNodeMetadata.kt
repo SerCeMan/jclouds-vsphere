@@ -68,16 +68,16 @@ constructor(val serviceInstanceSupplier: Supplier<VSphereServiceInstance>,
                 val vmMORId = vm!!.mor._value
                 val vms = InventoryNavigator(instance.instance.rootFolder).searchManagedEntities("VirtualMachine")
                 for (machine in vms) {
-
                     if (machine.mor.getVal() == vmMORId) {
                         freshVm = machine as VirtualMachine
                         break
                     }
                 }
-                val locationBuilder = LocationBuilder()
-                locationBuilder.description("")
-                locationBuilder.id("")
-                locationBuilder.scope(LocationScope.HOST)
+                val locationBuilder = LocationBuilder().apply {
+                    description("")
+                    id("")
+                    scope(LocationScope.HOST)
+                }
 
                 if (freshVm == null) {
                     nodeMetadataBuilder.status(Status.ERROR).id("")

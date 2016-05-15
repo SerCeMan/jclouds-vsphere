@@ -74,9 +74,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
     private val dnsValidator = DnsNameValidator(3, 30)
 
     override fun createNodeWithGroupEncodedIntoName(tag: String, name: String, template: Template): ComputeServiceAdapter.NodeAndInitialCredentials<VirtualMachine>? {
-
         val vOptions = template.options as VSphereTemplateOptions
-
         val datacenterName = vOptions.datacenter
         try {
             this.serviceInstance.get().use { instance ->
@@ -167,7 +165,6 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
     }
 
     override fun listNodesByIds(ids: Iterable<String>): Iterable<VirtualMachine> {
-
         var vms: Iterable<VirtualMachine> = ImmutableSet.of<VirtualMachine>()
         try {
             serviceInstance.get().use { instance ->
@@ -226,12 +223,12 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
 
     override fun listLocations() = ImmutableSet.of<Location>()
 
-    override fun getNode(vmName: String) = serviceInstance.get().use { instance -> getVM(vmName, instance.instance.rootFolder) }
+    override fun getNode(vmName: String) = serviceInstance.get().use { instance -> instance.findVm(vmName) }
 
     override fun destroyNode(vmName: String) {
         try {
             serviceInstance.get().use { instance ->
-                val virtualMachine = getVM(vmName, instance.instance.rootFolder)!!
+                val virtualMachine = findVM(vmName, instance.instance.rootFolder)!!
                 val powerOffTask = virtualMachine.powerOffVM_Task()
                 if (powerOffTask.waitForTask() == Task.SUCCESS)
                     logger.debug(String.format("VM %s powered off", vmName))
@@ -250,8 +247,8 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         }
     }
 
-    override fun rebootNode(vmName: String) {
-        val virtualMachine = getNode(vmName)
+    override fun rebootNode(vmName: String) = serviceInstance.get().use { instance ->
+        val virtualMachine = instance.findVm(vmName)
         if (virtualMachine == null) {
             logger.info("No node $vmName found")
             return
@@ -266,56 +263,52 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
     }
 
     override fun resumeNode(vmName: String) {
-        val virtualMachine = getNode(vmName)
-        if (virtualMachine == null) {
-            logger.info("No node $vmName found")
-            return
-        }
-
-        if (virtualMachine.runtime.getPowerState() == VirtualMachinePowerState.poweredOff) {
-            try {
-                val task = virtualMachine.powerOnVM_Task(null)
-                if (task.waitForTask() == Task.SUCCESS) {
-                    logger.debug("${virtualMachine.name} resumed")
-                }
-            } catch (e: Exception) {
-                logger.error("Can't resume vm $vmName", e)
-                propagate(e)
+        serviceInstance.get().use { instance ->
+            val virtualMachine = instance.findVm(vmName)
+            if (virtualMachine == null) {
+                logger.info("No node $vmName found")
+                return
             }
-
-        } else {
-            logger.debug(vmName + " can't be resumed")
+            if (virtualMachine.runtime.getPowerState() == VirtualMachinePowerState.poweredOff) {
+                try {
+                    val task = virtualMachine.powerOnVM_Task(null)
+                    if (task.waitForTask() == Task.SUCCESS) {
+                        logger.debug("${virtualMachine.name} resumed")
+                    }
+                } catch (e: Exception) {
+                    logger.error("Can't resume vm $vmName", e)
+                    throw e
+                }
+            } else {
+                logger.debug(vmName + " can't be resumed")
+            }
         }
     }
 
-    override fun suspendNode(vmName: String) {
-        val virtualMachine = getNode(vmName)
+    override fun suspendNode(vmName: String) = serviceInstance.get().use { instance ->
+        val virtualMachine = instance.findVm(vmName)
         if (virtualMachine == null) {
             logger.info("No node $vmName found")
             return
         }
-
         try {
             val task = virtualMachine.suspendVM_Task()
-            if (task.waitForTask() == Task.SUCCESS)
-                logger.debug(vmName + " suspended")
-            else
-                logger.debug(vmName + " can't be suspended")
+            logger.debug("$vmName" + if (task.waitForTask() == Task.SUCCESS) "suspended" else "can't be suspended")
         } catch (e: Exception) {
             logger.error("Can't suspend vm " + vmName, e)
-            propagate(e)
-        }
-
-    }
-
-    override fun getImage(imageName: String): Image? {
-        try {
-            serviceInstance.get().use { instance -> return virtualMachineToImage.apply(getVMwareTemplate(imageName, instance.instance.rootFolder)) }
-        } catch (t: Throwable) {
-            Throwables.propagateIfPossible(t)
-            return null
+            throw e;
         }
     }
+
+    override fun getImage(imageName: String): Image? =
+            try {
+                serviceInstance.get().use { instance ->
+                    virtualMachineToImage.apply(getVMwareTemplate(imageName, instance.instance.rootFolder))
+                }
+            } catch (e: Exception) {
+                logger.error("Can't get image", e)
+                throw e;
+            }
 
     fun VirtualMachine.findFolder(serviceInstance: Supplier<VSphereServiceInstance>, folderName: String?): Folder {
         val master = this;
@@ -325,6 +318,8 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         val entity = InventoryNavigator(instance.instance.rootFolder).searchManagedEntity("Folder", folderName)
         return entity as Folder
     }
+
+    private fun VSphereServiceInstance.findVm(vmName: String) = findVM(vmName, instance.rootFolder)
 
     private fun cloneMaster(master: VirtualMachine, name: String, cloneSpec: VirtualMachineCloneSpec, folderName: String?): VirtualMachine {
 
@@ -359,9 +354,9 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                                           val rootFolder: Folder) : Callable<VirtualMachine> {
         override fun call(): VirtualMachine {
             var cloned: VirtualMachine?
-            cloned = getVM(vmName, folder)
+            cloned = findVM(vmName, folder)
             if (cloned == null)
-                cloned = getVM(vmName, rootFolder)
+                cloned = findVM(vmName, rootFolder)
             return cloned!!
         }
     }
@@ -380,13 +375,14 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         return null
     }
 
-    private fun getVM(vmName: String, nodesFolder: Folder): VirtualMachine? {
+    private fun findVM(vmName: String, nodesFolder: Folder): VirtualMachine? {
         logger.trace(">> search for vm with name : " + vmName)
         var vm: VirtualMachine? = null
         try {
             vm = InventoryNavigator(nodesFolder).searchManagedEntity("VirtualMachine", vmName) as VirtualMachine
         } catch (e: Exception) {
-            logger.error("Can't find vm", e)
+            // It might be expected behaviour
+            logger.debug("Can't find vm", e)
         }
         return vm
     }
@@ -394,7 +390,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
     private fun getVMwareTemplate(imageName: String, rootFolder: Folder): VirtualMachine {
         var image: VirtualMachine? = null
         try {
-            val node = getVM(imageName, rootFolder)
+            val node = findVM(imageName, rootFolder)
             if (VSpherePredicate.isTemplatePredicate(node))
                 image = node
         } catch (e: Exception) {
