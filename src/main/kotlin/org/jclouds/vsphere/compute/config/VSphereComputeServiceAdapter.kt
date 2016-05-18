@@ -28,10 +28,13 @@ import com.google.common.collect.Lists
 import com.google.common.collect.Sets
 import com.vmware.vim25.*
 import com.vmware.vim25.mo.*
+import com.vmware.vim25.mox.VirtualMachineDeviceManager
 import org.jclouds.compute.ComputeServiceAdapter
+import org.jclouds.compute.ComputeServiceAdapter.NodeAndInitialCredentials
 import org.jclouds.compute.domain.Hardware
 import org.jclouds.compute.domain.Image
 import org.jclouds.compute.domain.Template
+import org.jclouds.compute.domain.Volume
 import org.jclouds.compute.reference.ComputeServiceConstants
 import org.jclouds.domain.Location
 import org.jclouds.domain.LoginCredentials
@@ -103,6 +106,18 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                     else
                         virtualMachineConfigSpec.setNumCPUs(1)
 
+                    val virtualDisk = master.findVirtualDisk()
+                    if (virtualDisk != null) {
+                        virtualMachineConfigSpec.deviceChange = template.hardware.volumes.map { volume ->
+                            VirtualDeviceConfigSpec().apply {
+                                operation = VirtualDeviceConfigSpecOperation.edit
+                                device = virtualDisk.apply {
+                                    capacityInKB = volume.sizeInKilobytes()
+                                }
+                            }
+                        }.toTypedArray()
+                    }
+
                     val extraConf = vOptions.extraConfig
                     if (extraConf != null) {
                         virtualMachineConfigSpec.setExtraConfig(extraConf.map { e ->
@@ -116,18 +131,15 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
 
                     cloneSpec.setConfig(virtualMachineConfigSpec)
 
-                    var cloned: VirtualMachine? = null
+                    var cloned: VirtualMachine
                     try {
                         cloned = cloneMaster(master, name, cloneSpec, vOptions.folder)
                         VSpherePredicate.WAIT_FOR_NIC(1000 * 60 * 60 * 2, TimeUnit.MILLISECONDS).apply(cloned)
                     } catch (e: Exception) {
                         logger.error("Can't clone vm " + master.name + ", Error message: " + e.toString(), e)
-                        propagate(e)
+                        throw e;
                     }
-
-                    val nodeAndInitialCredentials = ComputeServiceAdapter.NodeAndInitialCredentials<VirtualMachine>(cloned, cloned!!.name,
-                            LoginCredentials.builder().user("core").password(vmInitPassword).build())
-                    return nodeAndInitialCredentials
+                    return NodeAndInitialCredentials(cloned, cloned.name, null)
                 })
             }
         } catch (t: Throwable) {
@@ -137,6 +149,10 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
 
         return null
     }
+
+    private fun Volume.sizeInKilobytes() = size.toLong() * 1024 * 1024
+
+    private fun VirtualMachine.findVirtualDisk() = (VirtualMachineDeviceManager(this).allVirtualDevices.filter { it is VirtualDisk }.firstOrNull() as VirtualDisk?)
 
     private fun listNodes(instance: VSphereServiceInstance): Collection<VirtualMachine> {
         var vms: Collection<VirtualMachine> = ImmutableSet.of<VirtualMachine>()
