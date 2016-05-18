@@ -30,11 +30,14 @@ import org.jclouds.compute.options.TemplateOptions
  * Set set = client.createNodesInGroup(tag, 2, templateBuilder.build());
  *
  */
+enum class CloningStrategy { FULL, LINKED}
+
 class VSphereTemplateOptions : TemplateOptions(), Cloneable {
     var domain: String? = null
     var datacenter = "default"
     var resourcePool: String? = null
     var folder: String? = null
+    var cloning: CloningStrategy = CloningStrategy.FULL
     var extraConfig: Map<String, String>? = null
 
     override fun clone() = VSphereTemplateOptions().apply { copyTo(this) }
@@ -52,31 +55,35 @@ class VSphereTemplateOptions : TemplateOptions(), Cloneable {
             if (resourcePool != null) {
                 eTo.resourcePool = resourcePool
             }
+            eTo.cloning = cloning
             if (extraConfig != null) {
                 eTo.extraConfig = extraConfig
             }
         }
     }
 
-
-    override fun hashCode(): Int {
-        var result = super.hashCode()
-        result += 31 * result + datacenter.hashCode()
-        result += 31 * result + (resourcePool?.hashCode() ?: 0)
-        result += 31 * result + (folder?.hashCode() ?: 0)
-        result += 31 * result + (extraConfig?.hashCode() ?: 0)
-        return result
-    }
-
-    override fun equals(other: Any?): Boolean {
+    override fun equals(other: Any?): Boolean{
         if (this === other) return true
         if (other?.javaClass != javaClass) return false
         if (!super.equals(other)) return false
         other as VSphereTemplateOptions
+        if (domain != other.domain) return false
         if (datacenter != other.datacenter) return false
         if (resourcePool != other.resourcePool) return false
         if (folder != other.folder) return false
+        if (cloning != other.cloning) return false
         if (extraConfig != other.extraConfig) return false
         return true
+    }
+
+    override fun hashCode(): Int{
+        var result = super.hashCode()
+        result += 31 * result + (domain?.hashCode() ?: 0)
+        result += 31 * result + datacenter.hashCode()
+        result += 31 * result + (resourcePool?.hashCode() ?: 0)
+        result += 31 * result + (folder?.hashCode() ?: 0)
+        result += 31 * result + cloning.hashCode()
+        result += 31 * result + (extraConfig?.hashCode() ?: 0)
+        return result
     }
 }

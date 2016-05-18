@@ -37,10 +37,8 @@ import org.jclouds.domain.Location
 import org.jclouds.domain.LoginCredentials
 import org.jclouds.logging.Logger
 import org.jclouds.predicates.validators.DnsNameValidator
-import org.jclouds.vsphere.VSphereApiMetadata
 import org.jclouds.vsphere.compute.options.VSphereTemplateOptions
 import org.jclouds.vsphere.config.VSphereConstants
-import org.jclouds.vsphere.config.VSphereConstants.CLONING
 import org.jclouds.vsphere.domain.HardwareProfiles
 import org.jclouds.vsphere.domain.VSphereHost
 import org.jclouds.vsphere.domain.VSphereServiceInstance
@@ -87,13 +85,13 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                     val resourcePool = checkNotNull<ResourcePool>(tryFindResourcePool(template, rootFolder), "resourcePool")
 
                     logger.trace("<< trying to use ResourcePool: " + resourcePool.name)
-                    // VSphereTemplateOptions vOptions = VSphereTemplateOptions.class.cast(template.getOptions());
 
 
                     val cloneSpec = MasterToVirtualMachineCloneSpec(
                             resourcePool,
+                            logger,
                             sphereHost.datastore,
-                            VSphereApiMetadata.defaultProps().getProperty(CLONING),
+                            vOptions.cloning,
                             name,
                             vOptions).invoke(master)
 

@@ -59,7 +59,6 @@ class VSphereApiMetadata(builder: VBuilder) : BaseHttpApiMetadata<VSphereApi>(bu
             setProperty("jclouds.dns_name_length_max", "80")
             setProperty(PROPERTY_SESSION_INTERVAL, "300")
             setProperty(VSphereConstants.JCLOUDS_VSPHERE_VM_PASSWORD, "master")
-            setProperty(VSphereConstants.CLONING, "full")
         }
     }
 }
