@@ -91,37 +91,32 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                             vOptions).invoke(master)
 
 
-                    val virtualMachineConfigSpec = VirtualMachineConfigSpec()
-                    virtualMachineConfigSpec.setMemoryMB(template.hardware.ram.toLong())
-                    if (template.hardware.processors.size > 0)
-                        virtualMachineConfigSpec.setNumCPUs(template.hardware.processors[0].cores.toInt())
-                    else
-                        virtualMachineConfigSpec.setNumCPUs(1)
+                    cloneSpec.config = VirtualMachineConfigSpec().apply {
+                        memoryMB = template.hardware.ram.toLong()
+                        numCPUs = when {
+                            template.hardware.processors.size > 0 -> template.hardware.processors[0].cores.toInt()
+                            else -> 1
+                        }
 
-                    val virtualDisk = master.findVirtualDisk()
-                    if (virtualDisk != null) {
-                        virtualMachineConfigSpec.deviceChange = template.hardware.volumes.map { volume ->
-                            VirtualDeviceConfigSpec().apply {
-                                operation = VirtualDeviceConfigSpecOperation.edit
-                                device = virtualDisk.apply {
-                                    capacityInKB = volume.sizeInKilobytes()
+                        deviceChange = master.findVirtualDisk()?.let { virtualDisk ->
+                            template.hardware.volumes.map { volume ->
+                                VirtualDeviceConfigSpec().apply {
+                                    operation = VirtualDeviceConfigSpecOperation.edit
+                                    device = virtualDisk.apply {
+                                        capacityInKB = volume.sizeInKilobytes()
+                                    }
                                 }
-                            }
-                        }.toTypedArray()
-                    }
+                            }.toTypedArray()
+                        }
 
-                    val extraConf = vOptions.extraConfig
-                    if (extraConf != null) {
-                        virtualMachineConfigSpec.setExtraConfig(extraConf.map { e ->
+                        extraConfig = vOptions.extraConfig?.map { e ->
                             OptionValue().apply {
                                 key = e.key
                                 value = e.value
                             }
-                        }.toTypedArray())
+                        }?.toTypedArray()
                     }
 
-
-                    cloneSpec.setConfig(virtualMachineConfigSpec)
 
                     var cloned: VirtualMachine
                     try {
@@ -145,7 +140,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
     private fun VirtualMachine.findVirtualDisk() = (VirtualMachineDeviceManager(this).allVirtualDevices.filter { it is VirtualDisk }.firstOrNull() as VirtualDisk?)
 
     private fun listNodes(instance: VSphereServiceInstance): Collection<VirtualMachine> {
-        var vms: Collection<VirtualMachine> = ImmutableSet.of<VirtualMachine>()
+        var vms: Collection<VirtualMachine> = emptySet()
         try {
             val nodesFolder = instance.instance.rootFolder
             val managedEntities = InventoryNavigator(nodesFolder).searchManagedEntities("VirtualMachine")
@@ -157,15 +152,11 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         return vms
     }
 
-    override fun listNodes(): Iterable<VirtualMachine> {
-        try {
-            serviceInstance.get().use { instance -> return listNodes(instance) }
-        } catch (e: Throwable) {
-            logger.error("Can't find vm", e)
-            Throwables.propagateIfPossible(e)
-            return ImmutableSet.of<VirtualMachine>()
-        }
-
+    override fun listNodes(): Iterable<VirtualMachine> = try {
+        serviceInstance.get().use { instance -> listNodes(instance) }
+    } catch (e: Throwable) {
+        logger.error("Can't find vm", e)
+        throw e
     }
 
     override fun listNodesByIds(ids: Iterable<String>): Iterable<VirtualMachine> {
