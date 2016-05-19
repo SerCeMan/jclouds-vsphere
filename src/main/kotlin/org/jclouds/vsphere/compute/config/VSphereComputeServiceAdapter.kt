@@ -21,7 +21,6 @@ import com.github.rholder.retry.StopStrategies
 import com.github.rholder.retry.WaitStrategies
 import com.google.common.base.*
 import com.google.common.base.Function
-import com.google.common.base.Preconditions.checkNotNull
 import com.google.common.collect.ImmutableSet
 import com.google.common.collect.Lists
 import com.google.common.collect.Sets
@@ -39,7 +38,6 @@ import org.jclouds.domain.Location
 import org.jclouds.logging.Logger
 import org.jclouds.predicates.validators.DnsNameValidator
 import org.jclouds.vsphere.compute.options.VSphereTemplateOptions
-import org.jclouds.vsphere.config.VSphereConstants
 import org.jclouds.vsphere.domain.HardwareProfiles
 import org.jclouds.vsphere.domain.VSphereHost
 import org.jclouds.vsphere.domain.VSphereServiceInstance
@@ -60,9 +58,7 @@ class VSphereComputeServiceAdapter
 @Inject
 constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
             val virtualMachineToImage: VirtualMachineToImage,
-            val hostFunction: Function<String, VSphereHost>,
-            @Named(VSphereConstants.JCLOUDS_VSPHERE_VM_PASSWORD) val vmInitPassword: String) : ComputeServiceAdapter<VirtualMachine, Hardware, Image, Location> {
-
+            val hostFunction: Function<String, VSphereHost>) : ComputeServiceAdapter<VirtualMachine, Hardware, Image, Location> {
 
     @Resource
     @Named(ComputeServiceConstants.COMPUTE_LOGGER)
@@ -71,11 +67,11 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
 
     private val dnsValidator = DnsNameValidator(3, 30)
 
-    override fun createNodeWithGroupEncodedIntoName(tag: String, name: String, template: Template): ComputeServiceAdapter.NodeAndInitialCredentials<VirtualMachine>? {
+    override fun createNodeWithGroupEncodedIntoName(tag: String, name: String, template: Template): ComputeServiceAdapter.NodeAndInitialCredentials<VirtualMachine> {
         val vOptions = template.options as VSphereTemplateOptions
         val datacenterName = vOptions.datacenter
         try {
-            this.serviceInstance.get().use { instance ->
+            serviceInstance.get().use { instance ->
                 hostFunction.apply(datacenterName)!!.use({ sphereHost ->
                     val rootFolder = instance.instance.rootFolder
 
@@ -139,11 +135,9 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                 })
             }
         } catch (t: Throwable) {
-            logger.error("Got ERROR while create new VM : " + t.toString())
-            Throwables.propagateIfPossible(t)
+            logger.error("Got ERROR while create new VM : ${t.toString()}")
+            throw t
         }
-
-        return null
     }
 
     private fun Volume.sizeInKilobytes() = size.toLong() * 1024 * 1024
