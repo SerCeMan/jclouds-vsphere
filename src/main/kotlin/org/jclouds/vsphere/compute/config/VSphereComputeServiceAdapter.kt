@@ -22,7 +22,6 @@ import com.github.rholder.retry.WaitStrategies
 import com.google.common.base.*
 import com.google.common.base.Function
 import com.google.common.base.Preconditions.checkNotNull
-import com.google.common.base.Throwables.propagate
 import com.google.common.collect.ImmutableSet
 import com.google.common.collect.Lists
 import com.google.common.collect.Sets
@@ -37,7 +36,6 @@ import org.jclouds.compute.domain.Template
 import org.jclouds.compute.domain.Volume
 import org.jclouds.compute.reference.ComputeServiceConstants
 import org.jclouds.domain.Location
-import org.jclouds.domain.LoginCredentials
 import org.jclouds.logging.Logger
 import org.jclouds.predicates.validators.DnsNameValidator
 import org.jclouds.vsphere.compute.options.VSphereTemplateOptions
@@ -49,7 +47,6 @@ import org.jclouds.vsphere.functions.MasterToVirtualMachineCloneSpec
 import org.jclouds.vsphere.functions.VirtualMachineToImage
 import org.jclouds.vsphere.predicates.VSpherePredicate
 import java.util.*
-import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
 import javax.annotation.Resource
 import javax.inject.Inject
@@ -85,10 +82,9 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                     dnsValidator.validate(name)
 
                     val master = getVMwareTemplate(template.image.id, rootFolder)
-                    val resourcePool = checkNotNull<ResourcePool>(tryFindResourcePool(template, rootFolder), "resourcePool")
+                    val resourcePool = tryFindResourcePool(template, rootFolder)
 
                     logger.trace("<< trying to use ResourcePool: " + resourcePool.name)
-
 
                     val cloneSpec = MasterToVirtualMachineCloneSpec(
                             resourcePool,
@@ -324,69 +320,62 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                 throw e;
             }
 
-    fun VirtualMachine.findFolder(serviceInstance: Supplier<VSphereServiceInstance>, folderName: String?): Folder {
-        val master = this;
-        if (Strings.isNullOrEmpty(folderName))
-            return master.parent as Folder
-        val instance = serviceInstance.get()
-        val entity = InventoryNavigator(instance.instance.rootFolder).searchManagedEntity("Folder", folderName)
-        return entity as Folder
-    }
+    fun VirtualMachine.findFolder(serviceInstance: Supplier<VSphereServiceInstance>, folderName: String?) =
+            when {
+                folderName.isNullOrEmpty() -> this.parent as Folder
+                else -> serviceInstance.get().instance.rootFolder.let { rootFolder ->
+                    InventoryNavigator(rootFolder).searchManagedEntity("Folder", folderName) as Folder
+                }
+            }
 
     private fun VSphereServiceInstance.findVm(vmName: String) = findVM(vmName, instance.rootFolder)
 
     private fun cloneMaster(master: VirtualMachine, name: String, cloneSpec: VirtualMachineCloneSpec, folderName: String?): VirtualMachine {
-
         var cloned: VirtualMachine? = null
         try {
             val folder = master.findFolder(serviceInstance, folderName)
             val task = master.cloneVM_Task(folder, name, cloneSpec)
             val result = task.waitForTask()
             if (result == Task.SUCCESS) {
-                logger.trace("<< after clone search for VM with name: " + name)
-                val retryer = RetryerBuilder.newBuilder<VirtualMachine>().retryIfResult(Predicates.isNull<VirtualMachine>()).withStopStrategy(StopStrategies.stopAfterAttempt(5)).retryIfException().withWaitStrategy(WaitStrategies.fixedWait(1, TimeUnit.SECONDS)).build()
-                cloned = retryer.call(GetVirtualMachineCallable(name, folder, serviceInstance.get().instance.rootFolder))
+                logger.trace("<< after clone search for VM with name: $name")
+                val retryer = RetryerBuilder.newBuilder<VirtualMachine>()
+                        .retryIfResult(Predicates.isNull())
+                        .withStopStrategy(StopStrategies.stopAfterAttempt(5))
+                        .retryIfException()
+                        .withWaitStrategy(WaitStrategies.fixedWait(1, TimeUnit.SECONDS))
+                        .build()
+                cloned = retryer.call {
+                    findVM(name, folder) ?: findVM(name, serviceInstance.get().instance.rootFolder)
+                }
             } else {
                 val errorMessage = task.taskInfo.getError().getLocalizedMessage()
                 logger.error(errorMessage)
             }
         } catch (e: Exception) {
             if (e is NoPermission) {
-                logger.error("NoPermission: " + e.getPrivilegeId())
+                logger.error("NoPermission: ${e.getPrivilegeId()}")
             }
-            logger.error("Can't clone vm: " + e.toString(), e)
-            propagate(e)
+            logger.error("Can't clone vm: ${e.toString()}", e)
+            throw e
         }
 
         if (cloned == null)
-            logger.error("<< Failed to get cloned VM. " + name)
-        return checkNotNull<VirtualMachine>(cloned, "cloned")
+            throw Exception("<< Failed to get cloned VM. $name")
+        return cloned
     }
 
-    inner class GetVirtualMachineCallable(val vmName: String,
-                                          val folder: Folder,
-                                          val rootFolder: Folder) : Callable<VirtualMachine> {
-        override fun call(): VirtualMachine {
-            var cloned: VirtualMachine?
-            cloned = findVM(vmName, folder)
-            if (cloned == null)
-                cloned = findVM(vmName, rootFolder)
-            return cloned!!
-        }
-    }
-
-    private fun tryFindResourcePool(template: Template, folder: Folder): ResourcePool? {
+    private fun tryFindResourcePool(template: Template, folder: Folder): ResourcePool {
         val options = template.options as VSphereTemplateOptions
         val resourcePools: Iterable<ResourcePool>
         try {
             Preconditions.checkNotNull<String>(options.resourcePool)
             val resourcePoolEntities = InventoryNavigator(folder).searchManagedEntities("ResourcePool")
             resourcePools = resourcePoolEntities.map { it as ResourcePool }
-            return resourcePools.find { p -> options.resourcePool == p.name }
+            return resourcePools.find { p -> options.resourcePool == p.name }!!
         } catch (e: Exception) {
             logger.error("Problem in finding a valid resource pool", e)
+            throw e
         }
-        return null
     }
 
     private fun findVM(vmName: String, nodesFolder: Folder): VirtualMachine? {
@@ -405,10 +394,11 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         var image: VirtualMachine? = null
         try {
             val node = findVM(imageName, rootFolder)
-            if (VSpherePredicate.isTemplatePredicate(node))
+            if (VSpherePredicate.isTemplatePredicate(node)) {
                 image = node
+            }
         } catch (e: Exception) {
-            logger.error("cannot find an image called " + imageName, e)
+            logger.error("cannot find an image called $imageName", e)
             throw e
         }
         return image!!
