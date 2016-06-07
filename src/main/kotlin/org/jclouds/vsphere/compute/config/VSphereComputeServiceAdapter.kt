@@ -148,10 +148,9 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         if (configFn != null) {
             try {
                 val newConfig = when {
-                    net.size > 0 && extraConf.containsKey(cloudConf) ->
-                        extraConf
-                                .plus(cloudConf to replaceIp(configFn, net[0]))
-                                .plus(cloudConfEncoding to "base64")
+                    net.size > 0 -> extraConf
+                            .plus(cloudConf to replaceIp(configFn, net))
+                            .plus(cloudConfEncoding to "base64")
                     else -> extraConf
                 }
                 reconfigureNode(vm.name, VirtualMachineConfigSpec().apply {
@@ -169,10 +168,12 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         }
     }
 
-    private fun replaceIp(configFn: (String) -> String, guestNicInfo: GuestNicInfo): String {
-        val ip = guestNicInfo.ipAddress[0].toString()
+    private fun replaceIp(configFn: (String) -> String, guestNicInfo: Array<GuestNicInfo>): String {
+        val ip = findIp(guestNicInfo)
         return Base64.getEncoder().encodeToString(configFn(ip).toByteArray())
     }
+
+    private fun findIp(guestNicInfo: Array<GuestNicInfo>) = guestNicInfo.find { !it.ipAddress[0].startsWith("127.") }!!.ipAddress[0].toString()
 
     fun reconfigureNode(vmName: String, spec: VirtualMachineConfigSpec) = serviceInstance.get().use { instance ->
         val virtualMachine = findVM(vmName, instance.instance.rootFolder)
