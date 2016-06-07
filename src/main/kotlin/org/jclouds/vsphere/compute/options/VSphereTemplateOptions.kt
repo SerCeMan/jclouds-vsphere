@@ -37,6 +37,7 @@ class VSphereTemplateOptions : TemplateOptions(), Cloneable {
     var datacenter = "default"
     var resourcePool: String? = null
     var folder: String? = null
+    var cloudConfigFun: ((String) -> String)? = null
     var cloning: CloningStrategy = CloningStrategy.FULL
     var extraConfig: Map<String, String>? = null
 
@@ -56,6 +57,7 @@ class VSphereTemplateOptions : TemplateOptions(), Cloneable {
                 eTo.resourcePool = resourcePool
             }
             eTo.cloning = cloning
+            eTo.cloudConfigFun = cloudConfigFun
             if (extraConfig != null) {
                 eTo.extraConfig = extraConfig
             }

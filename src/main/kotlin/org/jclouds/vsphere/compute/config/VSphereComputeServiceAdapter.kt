@@ -19,11 +19,12 @@ package org.jclouds.vsphere.compute.config
 import com.github.rholder.retry.RetryerBuilder
 import com.github.rholder.retry.StopStrategies
 import com.github.rholder.retry.WaitStrategies
-import com.google.common.base.*
 import com.google.common.base.Function
+import com.google.common.base.Preconditions
+import com.google.common.base.Predicates
+import com.google.common.base.Supplier
 import com.google.common.collect.ImmutableSet
 import com.google.common.collect.Lists
-import com.google.common.collect.Sets
 import com.vmware.vim25.*
 import com.vmware.vim25.mo.*
 import com.vmware.vim25.mox.VirtualMachineDeviceManager
@@ -38,7 +39,7 @@ import org.jclouds.domain.Location
 import org.jclouds.logging.Logger
 import org.jclouds.predicates.validators.DnsNameValidator
 import org.jclouds.vsphere.compute.options.VSphereTemplateOptions
-import org.jclouds.vsphere.domain.HardwareProfiles
+import org.jclouds.vsphere.domain.HardwareProfiles.*
 import org.jclouds.vsphere.domain.VSphereHost
 import org.jclouds.vsphere.domain.VSphereServiceInstance
 import org.jclouds.vsphere.functions.MasterToVirtualMachineCloneSpec
@@ -109,12 +110,14 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                             }.toTypedArray()
                         }
 
-                        extraConfig = vOptions.extraConfig?.map { e ->
-                            OptionValue().apply {
-                                key = e.key
-                                value = e.value
-                            }
-                        }?.toTypedArray()
+                        if (vOptions.cloudConfigFun == null) {
+                            extraConfig = vOptions.extraConfig?.map { e ->
+                                OptionValue().apply {
+                                    key = e.key
+                                    value = e.value
+                                }
+                            }?.toTypedArray()
+                        }
                     }
 
 
@@ -122,6 +125,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                     try {
                         cloned = cloneMaster(master, name, cloneSpec, vOptions.folder)
                         VSpherePredicate.WAIT_FOR_NIC(1000 * 60 * 60 * 2, TimeUnit.MILLISECONDS).apply(cloned)
+                        cloudConfigReinit(cloned, vOptions)
                     } catch (e: Exception) {
                         logger.error("Can't clone vm " + master.name + ", Error message: " + e.toString(), e)
                         throw e;
@@ -133,6 +137,62 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
             logger.error("Got ERROR while create new VM : ${t.toString()}")
             throw t
         }
+    }
+
+    private fun cloudConfigReinit(vm: VirtualMachine, vOptions: VSphereTemplateOptions) {
+        val cloudConf = "guestinfo.coreos.config.data"
+        val cloudConfEncoding = "guestinfo.coreos.config.data.encoding"
+        val extraConf = vOptions.extraConfig ?: hashMapOf()
+        val net = vm.guest.net
+        val configFn = vOptions.cloudConfigFun
+        if (configFn != null) {
+            try {
+                val newConfig = when {
+                    net.size > 0 && extraConf.containsKey(cloudConf) ->
+                        extraConf
+                                .plus(cloudConf to replaceIp(configFn, net[0]))
+                                .plus(cloudConfEncoding to "base64")
+                    else -> extraConf
+                }
+                reconfigureNode(vm.name, VirtualMachineConfigSpec().apply {
+                    extraConfig = newConfig.map { e ->
+                        OptionValue().apply {
+                            key = e.key
+                            value = e.value
+                        }
+                    }.toTypedArray()
+                })
+            } catch(e: Exception) {
+                logger.error("Can't reconfigure ${vm.name}")
+                throw RuntimeException("Can't reconfigure vm", e)
+            }
+        }
+    }
+
+    private fun replaceIp(configFn: (String) -> String, guestNicInfo: GuestNicInfo): String {
+        val ip = guestNicInfo.ipAddress[0].toString()
+        return Base64.getEncoder().encodeToString(configFn(ip).toByteArray())
+    }
+
+    fun reconfigureNode(vmName: String, spec: VirtualMachineConfigSpec) = serviceInstance.get().use { instance ->
+        val virtualMachine = findVM(vmName, instance.instance.rootFolder)
+        if (virtualMachine == null) {
+            throw IllegalArgumentException("VM $vmName can't be found")
+        }
+        val powerOff = virtualMachine.powerOffVM_Task().waitForTask()
+        if (powerOff != Task.SUCCESS) {
+            throw RuntimeException("Unable to power off machine $vmName")
+        }
+        val result = virtualMachine.reconfigVM_Task(spec).waitForTask()
+        val powerOn = virtualMachine.powerOnVM_Task(null).waitForTask()
+        if (powerOn != Task.SUCCESS) {
+            throw RuntimeException("Unable to power on machine $vmName")
+        }
+        logger.debug(when (result) {
+            Task.SUCCESS -> "VM $vmName reconfigured successfuly"
+            else -> "Reconfiguration of $vmName failed"
+        })
+        VSpherePredicate.WAIT_FOR_NIC(1000 * 60 * 60 * 2, TimeUnit.MILLISECONDS).apply(virtualMachine)
     }
 
     private fun Volume.sizeInKilobytes() = size.toLong() * 1024 * 1024
@@ -194,21 +254,18 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
     }
 
 
-    override fun listHardwareProfiles(): Iterable<Hardware> {
-        val hardware = Sets.newLinkedHashSet<org.jclouds.compute.domain.Hardware>()
-        hardware.add(HardwareProfiles.C1_M1_D10.hardware)
-        hardware.add(HardwareProfiles.C2_M2_D30.hardware)
-        hardware.add(HardwareProfiles.C2_M2_D50.hardware)
-        hardware.add(HardwareProfiles.C2_M4_D50.hardware)
-        hardware.add(HardwareProfiles.C2_M10_D80.hardware)
-        hardware.add(HardwareProfiles.C3_M10_D80.hardware)
-        hardware.add(HardwareProfiles.C4_M4_D20.hardware)
-        hardware.add(HardwareProfiles.C2_M6_D40.hardware)
-        hardware.add(HardwareProfiles.C8_M16_D30.hardware)
-        hardware.add(HardwareProfiles.C8_M16_D80.hardware)
-
-        return hardware
-    }
+    override fun listHardwareProfiles() = listOf(
+            C1_M1_D10,
+            C2_M2_D30,
+            C2_M2_D50,
+            C2_M4_D50,
+            C2_M10_D80,
+            C3_M10_D80,
+            C4_M4_D20,
+            C2_M6_D40,
+            C8_M16_D30,
+            C8_M16_D80
+    ).map { it.hardware }
 
     override fun listImages() = serviceInstance.get().use {
         listNodes(it)
@@ -216,7 +273,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                 .map { virtualMachineToImage.apply(it)!! }
     }
 
-    override fun listLocations() = ImmutableSet.of<Location>()
+    override fun listLocations() = emptySet<Location>()
 
     override fun getNode(vmName: String) = serviceInstance.get().use { instance -> instance.findVm(vmName) }
 
@@ -257,26 +314,24 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
         logger.debug("$vmName rebooted")
     }
 
-    override fun resumeNode(vmName: String) {
-        serviceInstance.get().use { instance ->
-            val virtualMachine = instance.findVm(vmName)
-            if (virtualMachine == null) {
-                logger.info("No node $vmName found")
-                return
-            }
-            if (virtualMachine.runtime.getPowerState() == VirtualMachinePowerState.poweredOff) {
-                try {
-                    val task = virtualMachine.powerOnVM_Task(null)
-                    if (task.waitForTask() == Task.SUCCESS) {
-                        logger.debug("${virtualMachine.name} resumed")
-                    }
-                } catch (e: Exception) {
-                    logger.error("Can't resume vm $vmName", e)
-                    throw e
+    override fun resumeNode(vmName: String) = serviceInstance.get().use { instance ->
+        val virtualMachine = instance.findVm(vmName)
+        if (virtualMachine == null) {
+            logger.info("No node $vmName found")
+            return
+        }
+        if (virtualMachine.runtime.getPowerState() == VirtualMachinePowerState.poweredOff) {
+            try {
+                val task = virtualMachine.powerOnVM_Task(null)
+                if (task.waitForTask() == Task.SUCCESS) {
+                    logger.debug("${virtualMachine.name} resumed")
                 }
-            } else {
-                logger.debug(vmName + " can't be resumed")
+            } catch (e: Exception) {
+                logger.error("Can't resume vm $vmName", e)
+                throw e
             }
+        } else {
+            logger.debug("$vmName can't be resumed")
         }
     }
 
@@ -333,8 +388,7 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
                     findVM(name, folder) ?: findVM(name, serviceInstance.get().instance.rootFolder)
                 }
             } else {
-                val errorMessage = task.taskInfo.getError().getLocalizedMessage()
-                logger.error(errorMessage)
+                logger.error(task.taskInfo.getError().getLocalizedMessage())
             }
         } catch (e: Exception) {
             if (e is NoPermission) {
@@ -386,6 +440,10 @@ constructor(val serviceInstance: Supplier<VSphereServiceInstance>,
             logger.error("cannot find an image called $imageName", e)
             throw e
         }
-        return image!!
+        if (image == null) {
+            throw Exception("cannot find an image called $imageName")
+        }
+        return image
     }
 }
+
